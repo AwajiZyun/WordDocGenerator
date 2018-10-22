@@ -1,0 +1,13 @@
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\bin\Debug\WordDocGenerator.exe.config
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.csprojResolveAssemblyReference.cache
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.Form1.resources
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.Properties.Resources.resources
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.csproj.GenerateResource.Cache
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\bin\Debug\WordDocGenerator.exe
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\bin\Debug\WordDocGenerator.pdb
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.exe
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.pdb
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.About.resources
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.Instrction.resources
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.csproj.ResolveComReference.cache
+C:\Users\Awaji\Desktop\WordDocGenerator\WordDocGenerator\WordDocGenerator\obj\Debug\WordDocGenerator.ProgressReport.resources
