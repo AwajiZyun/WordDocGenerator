@@ -86,9 +86,9 @@
             this.label4.Font = new System.Drawing.Font("Microsoft YaHei UI", 12F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
             this.label4.Location = new System.Drawing.Point(18, 97);
             this.label4.Name = "label4";
-            this.label4.Size = new System.Drawing.Size(226, 20);
+            this.label4.Size = new System.Drawing.Size(258, 20);
             this.label4.TabIndex = 0;
-            this.label4.Text = "3、单击左侧列表图片可放大；";
+            this.label4.Text = "3、右键单击左侧列表图片可放大；";
             // 
             // label5
             // 

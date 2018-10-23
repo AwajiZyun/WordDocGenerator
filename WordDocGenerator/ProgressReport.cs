@@ -15,5 +15,10 @@ namespace WordDocGenerator
         {
             InitializeComponent();
         }
+
+        public void SetValue(int value)
+        {
+            this.progressBar1.Value = value;
+        }
     }
 }

@@ -10,16 +10,21 @@ using System.Windows.Forms;
 
 using MSWord = Microsoft.Office.Interop.Word;
 using System.Reflection;
+using System.Threading;
 
 
 namespace WordDocGenerator
 {
     public partial class Form1 : Form
     {
-        List<string> lstImgPath;
-        List<string> lstImgDescription;
+        private List<string> lstImgPath;
+        private List<string> lstImgDescription;
 
-        int progressPercent;
+        private int totalImgCnts = 0;
+        private int curImgIndex = 0;
+        private ProgressReport dlgReport;
+
+        private string selectPath;
 
         public Form1()
         {
@@ -29,11 +34,68 @@ namespace WordDocGenerator
 
             lstImgPath = new List<string>();
             lstImgDescription = new List<string>();
-            for (int i = 0; i < 100; i++)
-            {
-                lstImgDescription.Add("");
-            }
             richTextBox1.LostFocus += richTextBox1_LostFocus;
+
+            backgroundWorker1.WorkerReportsProgress = true;
+            backgroundWorker1.WorkerSupportsCancellation = true;
+            backgroundWorker1.DoWork += DoWork_Handler;
+            backgroundWorker1.ProgressChanged += ProcessChanged_Handler;
+            backgroundWorker1.RunWorkerCompleted += RunWorkerCompleted_Handler;
+        }
+
+        /// <summary>
+        /// progress bar
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="args"></param>
+        private void DoWork_Handler(object sender, DoWorkEventArgs args)
+        {
+            BackgroundWorker worker = sender as BackgroundWorker;
+            int curIdx = 0;
+            while (backgroundWorker2.IsBusy || backgroundWorker3.IsBusy)
+            {
+                if (worker.CancellationPending)
+                {
+                    args.Cancel = true;
+                    break;
+                }
+                else
+                {
+                    worker.ReportProgress(curIdx++ * 5);
+                    if (curIdx * 5 >= 100)
+                    {
+                        curIdx = 0;
+                    }
+                    Thread.Sleep(500);
+                }
+            }
+            dlgReport.Close();
+        }
+
+        private void ProcessChanged_Handler(object sender, ProgressChangedEventArgs e)
+        {
+            dlgReport.SetValue(e.ProgressPercentage);
+        }
+
+        private void RunWorkerCompleted_Handler(object sender, RunWorkerCompletedEventArgs e)
+        {
+            dlgReport.Close();
+        }
+
+        /// <summary>
+        /// Scan folders for all images
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void backgroundWorker2_DoWork(object sender, DoWorkEventArgs e)
+        {   
+            DirectoryInfo directInfo = new DirectoryInfo(selectPath);
+            if (!directInfo.Exists || null == directInfo)
+            {
+                MessageBox.Show("文件夹不存在");
+                return;
+            }
+            scan(directInfo);
         }
 
         /// <summary>
@@ -49,7 +111,7 @@ namespace WordDocGenerator
             }
             catch (Exception ex)
             {
-                //MessageBox.Show(ex.ToString());
+                MessageBox.Show(ex.ToString());
             }
         }
 
@@ -89,6 +151,7 @@ namespace WordDocGenerator
             dlgInst.ShowDialog();
         }
 
+
         /// <summary>
         /// Load source folder images
         /// </summary>
@@ -104,15 +167,35 @@ namespace WordDocGenerator
                 {
                     return;
                 }
-                
-                // scan folder
-                DirectoryInfo directInfo = new DirectoryInfo(path.SelectedPath);
-                if (!directInfo.Exists || null == directInfo)
+                selectPath = path.SelectedPath;
+                totalImgCnts = 0;
+                curImgIndex = 0;
+                lstImgDescription.Clear();
+                lstImgPath.Clear();
+                listView1.Clear();
+                imageList1.Images.Clear();
+                for (int i = 0; i < 1000; i++)
                 {
-                    MessageBox.Show("文件夹不存在");
-                    return;
+                    lstImgDescription.Add("");
                 }
-                scan(directInfo);
+
+                if (!backgroundWorker2.IsBusy)
+                {
+                    backgroundWorker2.RunWorkerAsync();
+                }
+
+                // show progress bar
+                if (!backgroundWorker1.IsBusy)
+                {
+                    backgroundWorker1.RunWorkerAsync();
+                    dlgReport = new ProgressReport();
+                    dlgReport.ShowDialog();
+                }
+
+                while (this.backgroundWorker1.IsBusy || backgroundWorker2.IsBusy)
+                {
+                    Application.DoEvents();
+                }
 
                 listView1.BeginUpdate();
                 for (int i = 0; i < imageList1.Images.Count; i++)
@@ -121,6 +204,7 @@ namespace WordDocGenerator
                     lvi.ImageIndex = i;
                     lvi.Text = "item" + i;
                     this.listView1.Items.Add(lvi);
+                    curImgIndex++;
                 }
                 listView1.EndUpdate();
                 
@@ -141,6 +225,12 @@ namespace WordDocGenerator
             {
                 return;
             }
+            // maximum 1000 images
+            if (totalImgCnts >= 1000)
+            {
+                //MessageBox.Show("所选文件夹包含图片数超过1000，仅载入1000张图片");
+                return;
+            }
             DirectoryInfo dir = info as DirectoryInfo;
 
             if (dir == null)
@@ -159,6 +249,7 @@ namespace WordDocGenerator
                         file.Extension.ToUpper() == ".PNG" ||
                         file.Extension.ToUpper() == ".BMP")
                     {
+                        totalImgCnts++;
                         imageList1.Images.Add(Image.FromFile(file.DirectoryName + "\\" + file.Name));
                         lstImgPath.Add(file.DirectoryName + "\\" + file.Name);
                     }
@@ -206,7 +297,7 @@ namespace WordDocGenerator
                         totalChecked++;
                     }
                 }
-                progressPercent = 0;
+
                 foreach (ListViewItem item in listView1.Items)
                 {
                     if (item.Checked)
@@ -225,39 +316,39 @@ namespace WordDocGenerator
                 }
 
                 // Save word doc
-                System.DateTime currentTime=new System.DateTime();
+                System.DateTime currentTime = new System.DateTime();
                 currentTime = System.DateTime.Now;
                 object savePath = path.SelectedPath + "\\" + currentTime.Year.ToString() + "_" + currentTime.Month.ToString() + "_" +
-                    currentTime.Day.ToString() + "_" + currentTime.Hour.ToString() + "_" + currentTime.Minute.ToString() + "_" + 
+                    currentTime.Day.ToString() + "_" + currentTime.Hour.ToString() + "_" + currentTime.Minute.ToString() + "_" +
                     currentTime.Second.ToString() + ".doc";
                 wordDoc.SaveAs(ref savePath, ref format, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing,
                     ref Nothing, ref Nothing, ref Nothing, ref Nothing);
                 // close word doc
                 wordDoc.Close(ref Nothing, ref Nothing, ref Nothing);
                 wordApp.Quit(ref Nothing, ref Nothing, ref Nothing);
+
+                MessageBox.Show("导出完成");
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.ToString());
             }
+            //if (!backgroundWorker3.IsBusy)
+            //{
+                //backgroundWorker3.RunWorkerAsync();
+                // show progress bar
+                //if (!backgroundWorker1.IsBusy)
+                //{
+                //    backgroundWorker1.RunWorkerAsync();
+                //    dlgReport = new ProgressReport();
+                //    dlgReport.ShowDialog();
+                //}
+            //}
         }
 
-        /// <summary>
-        /// 
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
+        private void backgroundWorker3_DoWork(object sender, DoWorkEventArgs e)
         {
-            try
-            {
-                ProgressReport dlgProgress = new ProgressReport();
-
-            }
-            catch(Exception ex)
-            {
-                ;
-            }
+            ;
         }
 
         /// <summary>
@@ -278,6 +369,24 @@ namespace WordDocGenerator
             {
                 richTextBox1.Text = "";
                 //MessageBox.Show(listView1.FocusedItem.ImageIndex.ToString() + "\n" + ex.ToString());
+            }
+        }
+
+        private void listView1_ItemChecked(object sender, ItemCheckedEventArgs e)
+        {
+            if (e.Item.Checked)
+            {
+                e.Item.Selected = true;
+                e.Item.Focused = true;
+                try
+                {
+                    richTextBox1.Text = lstImgDescription[listView1.FocusedItem.ImageIndex];
+                    richTextBox1.Focus();
+                }
+                catch (Exception ex)
+                {
+                    richTextBox1.Text = "";
+                }
             }
         }
 
