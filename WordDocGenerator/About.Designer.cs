@@ -41,7 +41,7 @@
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(100, 39);
             this.label1.TabIndex = 1;
-            this.label1.Text = "WordDocGenerator\r\nword文档生成器\r\nVer 0.1Beta";
+            this.label1.Text = "WordDocGenerator\r\nword文档生成器\r\nVer 0.2Beta";
             // 
             // label2
             // 
