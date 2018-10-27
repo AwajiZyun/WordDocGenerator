@@ -273,6 +273,9 @@ namespace WordDocGenerator
                 object SaveDocument = true;
                 MSWord.Application wordApp = new MSWord.ApplicationClass();
                 MSWord.Document wordDoc = wordApp.Documents.Add(ref Nothing, ref Nothing, ref Nothing, ref Nothing);
+                object what = MSWord.WdGoToItem.wdGoToBookmark;
+                wordApp.Selection.GoTo(what, Nothing, Nothing, EndOfDoc);
+                wordApp.Selection.TypeText("\n\n");
 
                 // look for checked items
                 foreach (ListViewItem item in listView1.Items)
@@ -282,16 +285,17 @@ namespace WordDocGenerator
                         // save Image and descrptions
                         object range = wordDoc.Bookmarks.get_Item(ref EndOfDoc).Range;
                         wordDoc.InlineShapes.AddPicture(lstImgPath[item.ImageIndex], ref LinkOfFile, ref SaveDocument, ref range);
-                        object what = MSWord.WdGoToItem.wdGoToBookmark;
+                        what = MSWord.WdGoToItem.wdGoToBookmark;
                         wordApp.Selection.GoTo(what, Nothing, Nothing, EndOfDoc);
                         wordApp.Selection.TypeText("\n" + lstImgDescription[item.ImageIndex] + "\n\n");
-
+#if false
                         // copy files
                         string fileName = System.IO.Path.GetFileName(lstImgPath[item.ImageIndex]);
                         if (!File.Exists(selectPath + "\\" + fileName))
                         {
                             File.Copy(lstImgPath[item.ImageIndex], selectPath + "\\" + fileName);
                         }
+#endif
 
                         curLoadedIdx++;
                     }
