@@ -1,5 +1,6 @@
 ﻿#VCsharp
 
+.vs
 *.pdb
 /WordDocGenerator/bin
 /WordDocGenerator/obj
