@@ -7,7 +7,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Windows.Forms;
-
 using MSWord = Microsoft.Office.Interop.Word;
 using System.Reflection;
 using System.Threading;
@@ -17,7 +16,7 @@ namespace WordDocGenerator
 {
     public partial class Form1 : Form
     {
-        private const int MAX_LOAD_IMG_CNTS = 1024;
+        private const int MAX_LOAD_IMG_CNTS = 4096;
 
         private List<string> lstImgPath;
         private List<string> lstImgDescription;
@@ -25,7 +24,8 @@ namespace WordDocGenerator
         private ProgressReport dlgReport;
 
         private string selectPath;
-
+        private string saveDocName;
+        private bool finWriteDocFlag = false;
         private int curLoadedIdx;
         private int totalCheckedCnt;
         private delegate void UpdateList();
@@ -45,6 +45,19 @@ namespace WordDocGenerator
             backgroundWorker1.WorkerSupportsCancellation = true;
             backgroundWorker1.ProgressChanged += ProcessChanged_Handler;
             backgroundWorker1.RunWorkerCompleted += RunWorkerCompleted_Handler;
+
+            // Create tmp folder
+            try
+            {
+                if (!Directory.Exists(System.Environment.CurrentDirectory + "\\tmp"))
+                {
+                    Directory.CreateDirectory(System.Environment.CurrentDirectory + "\\tmp");
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+            }
         }
 
         /// <summary>
@@ -55,7 +68,7 @@ namespace WordDocGenerator
         private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
         {
             BackgroundWorker worker = sender as BackgroundWorker;
-            while (backgroundWorker3.IsBusy)
+            while (!finWriteDocFlag)
             {
                 if (worker.CancellationPending)
                 {
@@ -68,7 +81,6 @@ namespace WordDocGenerator
                     Thread.Sleep(100);
                 }
             }
-            //dlgReport.Close();
         }
 
         private void ProcessChanged_Handler(object sender, ProgressChangedEventArgs e)
@@ -87,7 +99,7 @@ namespace WordDocGenerator
         /// <param name="sender"></param>
         /// <param name="e"></param>
         private void backgroundWorker2_DoWork(object sender, DoWorkEventArgs e)
-        {   
+        {
             DirectoryInfo directInfo = new DirectoryInfo(selectPath);
             if (!directInfo.Exists || null == directInfo)
             {
@@ -108,10 +120,13 @@ namespace WordDocGenerator
             {
                 // choose target folder
                 FolderBrowserDialog path = new FolderBrowserDialog();
+                path.RootFolder = Environment.SpecialFolder.MyComputer;
+                
                 if (DialogResult.Cancel == path.ShowDialog())
                 {
                     return;
                 }
+                Environment.SpecialFolder root = path.RootFolder;
                 selectPath = path.SelectedPath;
                 lstImgDescription.Clear();
                 lstImgPath.Clear();
@@ -153,7 +168,8 @@ namespace WordDocGenerator
             {
                 ListViewItem lvi = new ListViewItem();
                 lvi.ImageIndex = i;
-                lvi.Text = System.IO.Path.GetFileName(lstImgPath[i]);
+                String fileName = System.IO.Path.GetFileName(lstImgPath[i]);
+                lvi.Text = fileName.Length > 16 ? fileName.Substring(0, 16) : fileName;
                 this.listView1.Items.Add(lvi);
             }
             curLoadedIdx = imageList1.Images.Count;
@@ -188,7 +204,7 @@ namespace WordDocGenerator
                 return;
             }
             FileSystemInfo[] files = dir.GetFileSystemInfos();
-            for(int i = 0; i < files.Length; i++)
+            for (int i = 0; i < files.Length; i++)
             {
                 FileInfo file = files[i] as FileInfo;
                 if (file != null)
@@ -231,10 +247,10 @@ namespace WordDocGenerator
             }
             selectPath = path.SelectedPath;
 
-            if (!backgroundWorker3.IsBusy)
-            {
-                backgroundWorker3.RunWorkerAsync();
-            }
+            // Create word doc
+            Thread threadDoc = new Thread(new ThreadStart(StartMethod));
+            threadDoc.SetApartmentState(ApartmentState.STA);
+            threadDoc.Start();
 
             // show progress bar
             curLoadedIdx = 0;
@@ -245,7 +261,7 @@ namespace WordDocGenerator
                     totalCheckedCnt++;
                 }
             }
-            if (!backgroundWorker1.IsBusy)
+            if (!backgroundWorker1.IsBusy) 
             {
                 backgroundWorker1.RunWorkerAsync();
                 dlgReport = new ProgressReport();
@@ -259,6 +275,119 @@ namespace WordDocGenerator
             MessageBox.Show("导出完成");
 
             return;
+        }
+
+        private void StartMethod()
+        {
+            finWriteDocFlag = false;
+            WriteDoc();
+            finWriteDocFlag = true;
+            //this.BeginInvoke(new WriteWordDoc(WriteDoc));
+        }
+
+        public delegate void WriteWordDoc();
+
+        public void WriteDoc()
+        {
+            try
+            {
+                MessageBox.Show("1");
+                // generate word obejct
+                object Nothing = Missing.Value;
+                object format = MSWord.WdSaveFormat.wdFormatDocument;
+                object EndOfDoc = "\\endofdoc";
+                object LinkOfFile = false;
+                object SaveDocument = true;
+                MSWord.Application wordApp = new MSWord.ApplicationClass();
+                MSWord.Document wordDoc = wordApp.Documents.Add(ref Nothing, ref Nothing, ref Nothing, ref Nothing);
+                MessageBox.Show("2");
+
+                // look for checked items
+                foreach (ListViewItem item in listView1.Items)
+                {
+                    if (item.Checked)
+                    {
+                        String newFilePath = lstImgPath[item.ImageIndex];
+                        // Resize image
+                        Image srcImage = Image.FromFile(newFilePath);
+                        Image loadImg = srcImage;
+                        if (srcImage.Width > 1920 || srcImage.Width > 1080)
+                        {
+                            double scaleFactor = srcImage.Width >= srcImage.Height ?
+                                1920.0 / srcImage.Width : 1080.0 / srcImage.Height;
+                            int newWidth = (int)(srcImage.Width * scaleFactor);
+                            int newHeight = (int)(srcImage.Height * scaleFactor);
+                            loadImg = new Bitmap(newWidth, newHeight);
+                            var graphics = Graphics.FromImage(loadImg);
+                            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                            graphics.DrawImage(srcImage, new Rectangle(0, 0, newWidth, newHeight));
+
+                            var encoder = System.Drawing.Imaging.ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == System.Drawing.Imaging.ImageFormat.Jpeg.Guid);
+                            var encParams = new System.Drawing.Imaging.EncoderParameters() { Param = new[] { new System.Drawing.Imaging.EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 40L) } };
+                            try
+                            {
+                                newFilePath = System.Environment.CurrentDirectory + "\\tmp" + 
+                                    newFilePath.Substring(newFilePath.LastIndexOf('\\'));
+                                loadImg.Save(newFilePath, encoder, encParams);
+                            }
+                            catch(Exception ex)
+                            {
+                                MessageBox.Show(ex.ToString());
+                            }
+                        }
+
+                        // Add image
+                        Clipboard.SetImage(loadImg);
+                        Object range = wordDoc.Bookmarks.get_Item(ref EndOfDoc).Range;
+                        MSWord.InlineShape il = wordDoc.InlineShapes.AddPicture(
+                            newFilePath, ref LinkOfFile, ref SaveDocument, ref range);
+
+                        // Add description
+                        object what = MSWord.WdGoToItem.wdGoToBookmark;
+                        wordApp.Selection.GoTo(what, Nothing, Nothing, EndOfDoc);
+                        wordApp.Selection.TypeText("\n" + lstImgDescription[item.ImageIndex] + "\n\n");
+
+                        MessageBox.Show("3");
+                        // copy files
+#if false
+                        string fileName = System.IO.Path.GetFileName(lstImgPath[item.ImageIndex]);
+                        if (!File.Exists(selectPath + "\\" + fileName))
+                        {
+                            File.Copy(lstImgPath[item.ImageIndex], selectPath + "\\" + fileName);
+                        }
+#endif
+                        // delete tmp file
+                        try
+                        {
+                            File.Delete(newFilePath);
+                        }
+                        catch (Exception ex)
+                        {
+                            MessageBox.Show(ex.ToString());
+                        }
+
+                        curLoadedIdx++;
+                    }
+                }
+
+                // Save word doc
+                System.DateTime currentTime = new System.DateTime();
+                currentTime = System.DateTime.Now;
+                object savePath = selectPath + "\\" + currentTime.Year.ToString() + "_" + currentTime.Month.ToString() + "_" +
+                    currentTime.Day.ToString() + "_" + currentTime.Hour.ToString() + "_" + currentTime.Minute.ToString() + "_" +
+                    currentTime.Second.ToString() + ".doc";
+                wordDoc.SaveAs(ref savePath, ref format, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing,
+                    ref Nothing, ref Nothing, ref Nothing, ref Nothing);
+                // close word doc
+                wordDoc.Close(ref Nothing, ref Nothing, ref Nothing);
+                wordApp.Quit(ref Nothing, ref Nothing, ref Nothing);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.ToString());
+            }
         }
 
         private void backgroundWorker3_DoWork(object sender, DoWorkEventArgs e)
@@ -278,20 +407,43 @@ namespace WordDocGenerator
                 foreach (ListViewItem item in listView1.Items)
                 {
                     if (item.Checked)
-                    {
+                    { 
+                        // Resize image
+                        Image srcImage = Image.FromFile(lstImgPath[item.ImageIndex]);
+                        Image loadImg = srcImage;
+                        if (srcImage.Width > 1920 || srcImage.Width > 1080)
+                        {
+                            double scaleFactor = srcImage.Width >= srcImage.Height ?
+                                1920.0 / srcImage.Width : 1080.0 / srcImage.Height;
+                            int newWidth = (int)(srcImage.Width * scaleFactor);
+                            int newHeight = (int)(srcImage.Height * scaleFactor);
+                            loadImg = new Bitmap(newWidth, newHeight);
+                            var graphics = Graphics.FromImage(loadImg);
+                            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
+                            graphics.DrawImage(srcImage, new Rectangle(0, 0, newWidth, newHeight));
+                        }
+                            
+
+                        Clipboard.SetImage(loadImg);
                         // save Image and descrptions
-                        object range = wordDoc.Bookmarks.get_Item(ref EndOfDoc).Range;
-                        wordDoc.InlineShapes.AddPicture(lstImgPath[item.ImageIndex], ref LinkOfFile, ref SaveDocument, ref range);
+                        MSWord.Range range = wordDoc.Bookmarks.get_Item(ref EndOfDoc).Range;
+                        range.Paste();
+                        //MSWord.InlineShape il = wordDoc.InlineShapes.AddPicture(
+                        //    lstImgPath[item.ImageIndex], ref LinkOfFile, ref SaveDocument, ref range);
                         object what = MSWord.WdGoToItem.wdGoToBookmark;
                         wordApp.Selection.GoTo(what, Nothing, Nothing, EndOfDoc);
                         wordApp.Selection.TypeText("\n" + lstImgDescription[item.ImageIndex] + "\n\n");
 
                         // copy files
+#if false
                         string fileName = System.IO.Path.GetFileName(lstImgPath[item.ImageIndex]);
                         if (!File.Exists(selectPath + "\\" + fileName))
                         {
                             File.Copy(lstImgPath[item.ImageIndex], selectPath + "\\" + fileName);
                         }
+#endif
 
                         curLoadedIdx++;
                     }
@@ -397,9 +549,9 @@ namespace WordDocGenerator
             {
                 lstImgDescription[listView1.FocusedItem.ImageIndex] = richTextBox1.Text;
             }
-            catch (Exception ex)
+            catch (Exception /*ex*/)
             {
-                MessageBox.Show(ex.ToString());
+                //MessageBox.Show(ex.ToString());
             }
         }
 
