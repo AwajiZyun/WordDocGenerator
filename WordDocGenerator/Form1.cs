@@ -24,12 +24,14 @@ namespace WordDocGenerator
         private ProgressReport dlgReport;
 
         private string selectPath;
-        private string saveDocName;
         private bool finWriteDocFlag = false;
         private int curLoadedIdx;
         private int totalCheckedCnt;
         private delegate void UpdateList();
         private delegate void AddImgList();
+        public delegate void WriteWordDoc();
+
+        public StreamWriter writer;
 
         public Form1()
         {
@@ -41,10 +43,10 @@ namespace WordDocGenerator
             lstImgDescription = new List<string>();
             richTextBox1.LostFocus += richTextBox1_LostFocus;
 
-            backgroundWorker1.WorkerReportsProgress = true;
-            backgroundWorker1.WorkerSupportsCancellation = true;
-            backgroundWorker1.ProgressChanged += ProcessChanged_Handler;
-            backgroundWorker1.RunWorkerCompleted += RunWorkerCompleted_Handler;
+            bgWorkerProgressBar.WorkerReportsProgress = true;
+            bgWorkerProgressBar.WorkerSupportsCancellation = true;
+            bgWorkerProgressBar.ProgressChanged += ProgressChanged_Handler;
+            bgWorkerProgressBar.RunWorkerCompleted += RunWorkerCompleted_Handler;
 
             // Create tmp folder
             try
@@ -58,55 +60,11 @@ namespace WordDocGenerator
             {
                 MessageBox.Show(ex.ToString());
             }
-        }
-
-        /// <summary>
-        /// progress bar
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="args"></param>
-        private void backgroundWorker1_DoWork(object sender, DoWorkEventArgs e)
-        {
-            BackgroundWorker worker = sender as BackgroundWorker;
-            while (!finWriteDocFlag)
+            if (!File.Exists(".\\log.log"))
             {
-                if (worker.CancellationPending)
-                {
-                    e.Cancel = true;
-                    break;
-                }
-                else
-                {
-                    worker.ReportProgress(curLoadedIdx * 100 / totalCheckedCnt);
-                    Thread.Sleep(100);
-                }
+                File.Create(".\\log.log").Close();
             }
-        }
-
-        private void ProcessChanged_Handler(object sender, ProgressChangedEventArgs e)
-        {
-            dlgReport.SetValue(e.ProgressPercentage);
-        }
-
-        private void RunWorkerCompleted_Handler(object sender, RunWorkerCompletedEventArgs e)
-        {
-            dlgReport.Close();
-        }
-
-        /// <summary>
-        /// Scan folders for all images
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void backgroundWorker2_DoWork(object sender, DoWorkEventArgs e)
-        {
-            DirectoryInfo directInfo = new DirectoryInfo(selectPath);
-            if (!directInfo.Exists || null == directInfo)
-            {
-                MessageBox.Show("文件夹不存在");
-                return;
-            }
-            scan(directInfo);
+            writer = File.AppendText(".\\log.log");
         }
 
         /// <summary>
@@ -116,6 +74,7 @@ namespace WordDocGenerator
         /// <param name="e"></param>
         private void buttonLoad_Click(object sender, EventArgs e)
         {
+            buttonLoad.Enabled = false;
             try
             {
                 // choose target folder
@@ -128,22 +87,20 @@ namespace WordDocGenerator
                 }
                 Environment.SpecialFolder root = path.RootFolder;
                 selectPath = path.SelectedPath;
+
+                // Initialization
                 lstImgDescription.Clear();
                 lstImgPath.Clear();
                 listView1.Clear();
                 imageList1.Images.Clear();
                 curLoadedIdx = 0;
-                for (int i = 0; i < MAX_LOAD_IMG_CNTS; i++)
+
+                if (!bgWorkerLoadImgs.IsBusy)
                 {
-                    lstImgDescription.Add("");
+                    bgWorkerLoadImgs.RunWorkerAsync();
                 }
 
-                if (!backgroundWorker2.IsBusy)
-                {
-                    backgroundWorker2.RunWorkerAsync();
-                }
-
-                while (backgroundWorker2.IsBusy)
+                while (bgWorkerLoadImgs.IsBusy)
                 {
                     Application.DoEvents();
                 }
@@ -156,6 +113,23 @@ namespace WordDocGenerator
             {
                 MessageBox.Show(ex.ToString());
             }
+            buttonLoad.Enabled = true;
+        }
+
+        /// <summary>
+        /// Scan folders for all images
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="e"></param>
+        private void bgWorkerLoadImgs_DoWork(object sender, DoWorkEventArgs e)
+        {
+            DirectoryInfo directInfo = new DirectoryInfo(selectPath);
+            if (!directInfo.Exists || null == directInfo)
+            {
+                MessageBox.Show("文件夹不存在");
+                return;
+            }
+            scan(directInfo);
         }
 
         /// <summary>
@@ -179,7 +153,11 @@ namespace WordDocGenerator
 
         private void AddImageData()
         {
+            //DateTime dt = DateTime.Now;
+            //writer.WriteLine(dt.Second.ToString() + ":" + dt.Millisecond.ToString() + " BeginUpdate");
             imageList1.Images.Add(Image.FromFile(lstImgPath[lstImgPath.Count - 1]));
+            //dt = DateTime.Now;
+            //writer.WriteLine(dt.Second.ToString() + ":" + dt.Millisecond.ToString() + " EndUpdate");
         }
 
         /// <summary>
@@ -216,15 +194,18 @@ namespace WordDocGenerator
                         file.Extension.ToUpper() == ".BMP")
                     {
                         lstImgPath.Add(file.DirectoryName + "\\" + file.Name);
-                        AddImgList updater = new AddImgList(AddImageData);
-                        Invoke(updater);
+                        lstImgDescription.Add("");
+
+                        AddImageData();
+                        //AddImgList updater = new AddImgList(AddImageData);
+                        //Invoke(updater);
                     }
                 }
                 else
                 {
                     scan(files[i]);
                 }
-                if (0 == i % 5)
+                if (0 == i % 10)
                 {
                     UpdateList updater = new UpdateList(UpdateListviewData);
                     Invoke(updater);
@@ -261,13 +242,13 @@ namespace WordDocGenerator
                     totalCheckedCnt++;
                 }
             }
-            if (!backgroundWorker1.IsBusy) 
+            if (!bgWorkerProgressBar.IsBusy) 
             {
-                backgroundWorker1.RunWorkerAsync();
+                bgWorkerProgressBar.RunWorkerAsync();
                 dlgReport = new ProgressReport();
                 dlgReport.ShowDialog();
             }
-            while (backgroundWorker1.IsBusy)
+            while (bgWorkerProgressBar.IsBusy)
             {
                 Application.DoEvents();
             }
@@ -284,8 +265,6 @@ namespace WordDocGenerator
             finWriteDocFlag = true;
             //this.BeginInvoke(new WriteWordDoc(WriteDoc));
         }
-
-        public delegate void WriteWordDoc();
 
         public void WriteDoc()
         {
@@ -391,83 +370,42 @@ namespace WordDocGenerator
             }
         }
 
-        private void backgroundWorker3_DoWork(object sender, DoWorkEventArgs e)
+        #region show write doc progress bar
+        /// <summary>
+        /// progress bar
+        /// </summary>
+        /// <param name="sender"></param>
+        /// <param name="args"></param>
+        private void bgWorkerProgressBar_DoWork(object sender, DoWorkEventArgs e)
         {
-            try
+            BackgroundWorker worker = sender as BackgroundWorker;
+            while (!finWriteDocFlag)
             {
-                // generate word obejct
-                object Nothing = Missing.Value;
-                object format = MSWord.WdSaveFormat.wdFormatDocument;
-                object EndOfDoc = "\\endofdoc";
-                object LinkOfFile = false;
-                object SaveDocument = true;
-                MSWord.Application wordApp = new MSWord.ApplicationClass();
-                MSWord.Document wordDoc = wordApp.Documents.Add(ref Nothing, ref Nothing, ref Nothing, ref Nothing);
-
-                // look for checked items
-                foreach (ListViewItem item in listView1.Items)
+                if (worker.CancellationPending)
                 {
-                    if (item.Checked)
-                    { 
-                        // Resize image
-                        Image srcImage = Image.FromFile(lstImgPath[item.ImageIndex]);
-                        Image loadImg = srcImage;
-                        if (srcImage.Width > 1920 || srcImage.Width > 1080)
-                        {
-                            double scaleFactor = srcImage.Width >= srcImage.Height ?
-                                1920.0 / srcImage.Width : 1080.0 / srcImage.Height;
-                            int newWidth = (int)(srcImage.Width * scaleFactor);
-                            int newHeight = (int)(srcImage.Height * scaleFactor);
-                            loadImg = new Bitmap(newWidth, newHeight);
-                            var graphics = Graphics.FromImage(loadImg);
-                            graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                            graphics.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
-                            graphics.PixelOffsetMode = System.Drawing.Drawing2D.PixelOffsetMode.HighQuality;
-                            graphics.DrawImage(srcImage, new Rectangle(0, 0, newWidth, newHeight));
-                        }
-                            
-
-                        Clipboard.SetImage(loadImg);
-                        // save Image and descrptions
-                        MSWord.Range range = wordDoc.Bookmarks.get_Item(ref EndOfDoc).Range;
-                        range.Paste();
-                        //MSWord.InlineShape il = wordDoc.InlineShapes.AddPicture(
-                        //    lstImgPath[item.ImageIndex], ref LinkOfFile, ref SaveDocument, ref range);
-                        object what = MSWord.WdGoToItem.wdGoToBookmark;
-                        wordApp.Selection.GoTo(what, Nothing, Nothing, EndOfDoc);
-                        wordApp.Selection.TypeText("\n" + lstImgDescription[item.ImageIndex] + "\n\n");
-
-                        // copy files
-#if false
-                        string fileName = System.IO.Path.GetFileName(lstImgPath[item.ImageIndex]);
-                        if (!File.Exists(selectPath + "\\" + fileName))
-                        {
-                            File.Copy(lstImgPath[item.ImageIndex], selectPath + "\\" + fileName);
-                        }
-#endif
-
-                        curLoadedIdx++;
-                    }
+                    e.Cancel = true;
+                    break;
                 }
-
-                // Save word doc
-                System.DateTime currentTime = new System.DateTime();
-                currentTime = System.DateTime.Now;
-                object savePath = selectPath + "\\" + currentTime.Year.ToString() + "_" + currentTime.Month.ToString() + "_" +
-                    currentTime.Day.ToString() + "_" + currentTime.Hour.ToString() + "_" + currentTime.Minute.ToString() + "_" +
-                    currentTime.Second.ToString() + ".doc";
-                wordDoc.SaveAs(ref savePath, ref format, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing, ref Nothing,
-                    ref Nothing, ref Nothing, ref Nothing, ref Nothing);
-                // close word doc
-                wordDoc.Close(ref Nothing, ref Nothing, ref Nothing);
-                wordApp.Quit(ref Nothing, ref Nothing, ref Nothing);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show(ex.ToString());
+                else
+                {
+                    worker.ReportProgress(curLoadedIdx * 100 / totalCheckedCnt);
+                    Thread.Sleep(100);
+                }
             }
         }
 
+        private void ProgressChanged_Handler(object sender, ProgressChangedEventArgs e)
+        {
+            dlgReport.SetValue(e.ProgressPercentage);
+        }
+
+        private void RunWorkerCompleted_Handler(object sender, RunWorkerCompletedEventArgs e)
+        {
+            dlgReport.Close();
+        }
+        #endregion
+
+        #region controls behavior
         /// <summary>
         /// Show image descrition
         /// </summary>
@@ -565,7 +503,20 @@ namespace WordDocGenerator
         {
             if (DialogResult.Cancel != MessageBox.Show("确定退出程序？", "提示", MessageBoxButtons.OKCancel))
             {
+                writer.Close();
                 this.Close();
+            }
+        }
+
+        private void Form1_FormClosing(object sender, FormClosingEventArgs e)
+        {
+            if (DialogResult.Cancel != MessageBox.Show("确定退出程序？", "提示", MessageBoxButtons.OKCancel))
+            {
+                writer.Close();
+            }
+            else
+            {
+                e.Cancel = true;
             }
         }
 
@@ -591,6 +542,8 @@ namespace WordDocGenerator
             Instrction dlgInst = new Instrction();
             dlgInst.ShowDialog();
         }
+        #endregion
+
 
     }
 }
